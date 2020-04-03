@@ -129,6 +129,7 @@ static void nfc_pairing_init()
 int main(void)
 {
     // Initialize.
+    uart_init();
     log_init();
     timer_init();
     bool erase_bonds = buttons_init();
@@ -141,6 +142,7 @@ int main(void)
     gap_params_init();
     gatt_init();
     qwr_init();
+    services_init();
     advertising_init();
     conn_params_init();
     peer_manager_init(erase_bonds);

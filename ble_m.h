@@ -94,6 +94,10 @@ void ble_disconnect(void);
  */
 void ble_set_device_name(char const * device_name);
 
+void uart_init(void);
+
+void services_init(void);
+
 
 /**@brief Function for getting the advertising module instance.
  *
