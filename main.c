@@ -149,6 +149,7 @@ int main(void)
         NRF_LOG_INFO("Bonds erased!");
     }
     nfc_pairing_init();
+    pm_peers_delete();
 
     // Start execution.
     NRF_LOG_INFO("NFC Connection Handover BLE peripheral device example started.");
