@@ -43,6 +43,7 @@
 #include "bsp.h"
 #include "ble_m.h"
 #include "nfc_ble_pair_lib.h"
+#include "smartlock.h"
 
 #define NRF_LOG_MODULE_NAME BUTTONS_M
 #include "nrf_log.h"
@@ -64,24 +65,26 @@ static void bsp_event_handler(bsp_event_t event)
 
     switch (event)
     {
-        case APP_BTN_EVT_DISCONNECT:
+        case BSP_EVENT_KEY_0:
             NRF_LOG_INFO("Terminating BLE connection.");
             ble_disconnect();
             break;
 
-        case APP_BTN_EVT_JUST_WORKS:
+        case BSP_EVENT_KEY_3:
             NRF_LOG_INFO("LEGACY JUST WORKS MODE!");
-            err_code = nfc_ble_pair_mode_set(NFC_PAIRING_MODE_JUST_WORKS);
+            //err_code = nfc_ble_pair_mode_set(NFC_PAIRING_MODE_JUST_WORKS);
             break;
 
-        case APP_BTN_EVT_OOB_PAIRING:
+        case BSP_EVENT_KEY_2:
             NRF_LOG_INFO("LEGACY OOB MODE!");
-            err_code = nfc_ble_pair_mode_set(NFC_PAIRING_MODE_OOB);
+            nrf_gpio_pin_toggle(RELAY_PIN);
+            //err_code = nfc_ble_pair_mode_set(NFC_PAIRING_MODE_OOB);
             break;
 
-        case APP_BTN_EVT_LESC_OOB:
+        case BSP_EVENT_KEY_1:
             NRF_LOG_INFO("LESC OOB MODE!");
-            err_code = nfc_ble_pair_mode_set(NFC_PAIRING_MODE_LESC_OOB);
+            nrf_gpio_pin_toggle(BEEP_PIN);
+            //err_code = nfc_ble_pair_mode_set(NFC_PAIRING_MODE_LESC_OOB);
             break;
 
         default:

@@ -98,6 +98,8 @@ void uart_init(void);
 
 void services_init(void);
 
+void uarts_ble_send_data(uint8_t data);
+
 
 /**@brief Function for getting the advertising module instance.
  *

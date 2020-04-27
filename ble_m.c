@@ -57,11 +57,13 @@
 #include "nrf_uart.h"
 
 #include "uarts.h"
+#include "smartlock.h"
 #include "nrf_delay.h"
 
 #define NRF_LOG_MODULE_NAME BLE_M
 #include "nrf_log.h"
 NRF_LOG_MODULE_REGISTER();
+
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(100, UNIT_1_25_MS)            /**< Minimum acceptable connection interval (0.1 seconds). */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(200, UNIT_1_25_MS)            /**< Maximum acceptable connection interval (0.2 second). */
@@ -158,6 +160,19 @@ void uart_event_handle(app_uart_evt_t * p_event)
     }
 }
 
+void uarts_ble_send_data(uint8_t data)
+{
+  uint8_t notify[2] = {0, '\n'};
+  uint16_t len = 1;
+
+	notify[0] = data;
+
+	//NRF_LOG_INFO("Send data to user = %x", notify[0]);
+	smart_lock_pulse_led();
+
+	ble_uarts_data_send(&m_uarts, notify, &len, m_conn_handle);
+}
+
 
 /**@brief Function for handling the data from the Nordic UART Service.
  *
@@ -169,10 +184,7 @@ void uart_event_handle(app_uart_evt_t * p_event)
 /**@snippet [Handling the data received over BLE] */
 static void uarts_data_handler(ble_uarts_evt_t * p_evt)
 {
-         uint8_t code[BLE_UARTS_MAX_DATA_LEN] = {0};
-         uint8_t vaild_code = 0x99;
-               uint8_t notify[2] = {0, '\n'};
-               uint16_t len = 1;
+    uint8_t code[BLE_UARTS_MAX_DATA_LEN] = {0};
 
     if (p_evt->type == BLE_UARTS_EVT_RX_DATA)
     {
@@ -184,16 +196,21 @@ static void uarts_data_handler(ble_uarts_evt_t * p_evt)
 
         for (uint32_t i = 0; i < p_evt->params.rx_data.length; i++)
         {
-            //NRF_LOG_INFO("READ DATA = 0x%x", p_evt->params.rx_data.p_data[i]);
             do
             {
-                code[i] = p_evt->params.rx_data.p_data[i];
-                err_code = app_uart_put(p_evt->params.rx_data.p_data[i]);
-                if ((err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY))
-                {
-                    NRF_LOG_ERROR("Failed receiving NUS message. Error 0x%x. ", err_code);
-                    APP_ERROR_CHECK(err_code);
-                }
+              code[i] = p_evt->params.rx_data.p_data[i];
+              if (code[i] >= 0x30 && code[i] <= 0x39)
+                code[i] = code[i] - 0x30;
+              else
+                code[i] = code[i] - 0x57;
+
+              //NRF_LOG_INFO("READ DATA = 0x%x", code[i]);
+              err_code = app_uart_put(p_evt->params.rx_data.p_data[i]);
+              if ((err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_BUSY))
+              {
+                NRF_LOG_ERROR("Failed receiving NUS message. Error 0x%x. ", err_code);
+                APP_ERROR_CHECK(err_code);
+              }
             } while (err_code == NRF_ERROR_BUSY);
         }
         if (p_evt->params.rx_data.p_data[p_evt->params.rx_data.length - 1] == '\r')
@@ -201,21 +218,7 @@ static void uarts_data_handler(ble_uarts_evt_t * p_evt)
             while (app_uart_put('\n') == NRF_ERROR_BUSY);
         }
 
-        // Access code confirmation.
-        if (code[0] == vaild_code)
-        {
-          notify[0] = 0x00;
-          ble_uarts_data_send(&m_uarts, notify, &len, m_conn_handle);
-          NRF_LOG_INFO("Access code is correct !");
-          nrf_gpio_pin_clear(LED_4);
-        }
-        else
-        {
-          notify[0] = 0xFF;
-          ble_uarts_data_send(&m_uarts, notify, &len, m_conn_handle);
-          NRF_LOG_INFO("Access code is incorrect !");
-          nrf_gpio_pin_set(LED_4);
-        }
+        smart_lock_parse_data(code, p_evt->params.rx_data.length);
     }
 
     if (p_evt->type == BLE_UARTS_EVT_TX_RDY)
@@ -500,7 +503,7 @@ void gatt_evt_handler(nrf_ble_gatt_t * p_gatt, nrf_ble_gatt_evt_t const * p_evt)
         m_ble_uarts_max_data_len = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;
         NRF_LOG_INFO("Data len is set to 0x%X(%d)", m_ble_uarts_max_data_len, m_ble_uarts_max_data_len);
     }
-    NRF_LOG_DEBUG("ATT MTU exchange completed. central 0x%x peripheral 0x%x",
+    NRF_LOG_INFO("ATT MTU exchange completed. central 0x%x peripheral 0x%x",
                   p_gatt->att_mtu_desired_central,
                   p_gatt->att_mtu_desired_periph);
 }

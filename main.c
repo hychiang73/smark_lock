@@ -50,6 +50,8 @@
 #include "app_timer.h"
 #include "nrf_pwr_mgmt.h"
 #include "nrf_ble_lesc.h"
+#include "uarts.h"
+#include "smartlock.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -57,11 +59,12 @@
 
 
 #define DEAD_BEEF   0xDEADBEEF /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
-#define DEVICE_NAME "Nordic_NFC_PAIR_REF"
+#define DEVICE_NAME "SmartLock_Pair"
 
 #ifndef NFC_PAIRING_MODE
     #define NFC_PAIRING_MODE NFC_PAIRING_MODE_JUST_WORKS
 #endif
+
 
 /**@brief Function for initializing nrf logger.
  */
@@ -135,6 +138,7 @@ int main(void)
     bool erase_bonds = buttons_init();
     power_management_init();
     ble_stack_init();
+    smart_lock_init();
 
     // Set BLE device name.
     ble_set_device_name(DEVICE_NAME);
@@ -159,7 +163,8 @@ int main(void)
     // Enter main loop.
     for (;;)
     {
-        idle_state_handle();
+      idle_state_handle();
+      smart_lock_detect();
     }
 }
 
