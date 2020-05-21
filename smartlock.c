@@ -14,8 +14,8 @@
 
 smart_lock_info sl_info;
 smart_lock_code_date sl_code_date;
-
-bool start_loop_locker = false;
+bool ble_lock_handle = false;
+uint8_t tmp_dev_id[SL_DEV_ID_LEN] = {0};
 
 void smart_lock_active_beep(bool enable)
 {
@@ -37,11 +37,11 @@ void smart_lock_pulse_led(void)
 {
 	for (int i = 0; i < 2; i++)
 	{
-		nrf_gpio_pin_clear(LED_1);
+		nrf_gpio_pin_clear(LED_PIN);
 		nrf_delay_ms(100);
-    nrf_gpio_pin_set(LED_1);
+    nrf_gpio_pin_set(LED_PIN);
 		nrf_delay_ms(100);
-		nrf_gpio_pin_clear(LED_1);
+		nrf_gpio_pin_clear(LED_PIN);
 	}
 }
 
@@ -52,8 +52,10 @@ int smart_lock_read_locker(void)
 
 void smart_lock_locked(void)
 {
+	NRF_LOG_INFO("lock status = %d", sl_info.lock_status);
 	if (sl_info.lock_status != SL_LOCK)
 	{
+		NRF_LOG_INFO("active relay to lock");
 		sl_info.lock_status = SL_LOCK;
 		nrf_gpio_pin_toggle(RELAY_PIN);
 	}
@@ -61,8 +63,10 @@ void smart_lock_locked(void)
 
 void smart_lock_unlocked(void)
 {
+  NRF_LOG_INFO("lock status = %d", sl_info.lock_status);
   if (sl_info.lock_status != SL_UNLOCK)
   {
+		NRF_LOG_INFO("active relay to unlock");
 		sl_info.lock_status = SL_UNLOCK;
 		nrf_gpio_pin_toggle(RELAY_PIN);
 	}
@@ -119,11 +123,38 @@ int smart_lock_compare_date(uint8_t *buf)
 		return -1;
 	}
 
-	if (minutes > (sl_code_date.minutes + 1))
+	if (minutes > sl_code_date.minutes + 1)
 	{
 		return -1;
 	}
 
+	return 0;
+}
+
+int smart_lock_compare_dev_id(uint8_t *buf)
+{
+	int i;
+
+	if (sl_info.dev_lock)
+	{
+		for (i = 0; i < SL_DEV_ID_LEN; i++)
+		{
+			NRF_LOG_INFO("[%d]: tmp dev id = %x, buf = %x", i, tmp_dev_id[i], buf[3 + i]);
+			if (tmp_dev_id[i] != buf[3 + i])
+				break;
+		}
+
+		if (i != SL_DEV_ID_LEN)
+			return -1;
+	}
+	else
+	{
+		for (i = 0; i < SL_DEV_ID_LEN; i++)
+		{
+			tmp_dev_id[i] = buf[3 + i];
+			NRF_LOG_INFO("store tmp_dev_id = %x", tmp_dev_id[i]);
+		}
+	}
 	return 0;
 }
 
@@ -132,11 +163,22 @@ void smart_lock_clear_code(void)
 	NRF_LOG_INFO("clear codes");
 
 	sl_info.code_valid = 0;
+	//sl_info.dev_lock = false;
 
 	for (int i = 0; i <= SL_CODE_NUM; i++)
 	{
 		sl_info.access_code[i] = 0xFF;
 	}
+}
+
+void smart_lock_read_status(void)
+{
+	int ret = smart_lock_read_locker();
+
+	if (smart_lock_read_locker() == LOCKER_CONNECT)
+		sl_info.lock_status = SL_LOCK;
+	else
+		sl_info.lock_status = SL_UNLOCK;
 }
 
 void smart_lock_parse_data(uint8_t *buf, int len)
@@ -149,32 +191,41 @@ void smart_lock_parse_data(uint8_t *buf, int len)
 
 	NRF_LOG_INFO("CMD = 0x%x, st_len = %d, len = %d", cmd, sl_len, len);
 
+	ble_lock_handle = true;
+
 	switch (cmd)
 	{
 		case SL_UNLOCK_CMD:
-			if (sl_info.update == false)
-			{
-				NRF_LOG_INFO("SmartLocker is not updated yet");
-				uarts_ble_send_data(SL_DEV_NEED_UPDATE);
-				return;
-			}
+//			if (sl_info.update == false)
+//			{
+//				NRF_LOG_INFO("SmartLocker is not updated yet");
+//				uarts_ble_send_data(SL_DEV_NEED_UPDATE);
+//				goto out;
+//			}
 
 			user_code = buf[2];
 		  NRF_LOG_INFO("User access code = %x", user_code);
-		  NRF_LOG_INFO("number of valid code = %d", sl_info.code_valid);
-
-		  if (smart_lock_compare_date(buf) != 0)
-			{
-				NRF_LOG_INFO("Codes are too older");
-				uarts_ble_send_data(SL_CODE_OUT_OF_DATE);
-				return;
-			}
+      NRF_LOG_INFO("valid code left = %d", sl_info.code_valid);
 
 			if (sl_info.code_valid <= 1)
 			{
 				NRF_LOG_INFO("Lock needs new codes");
 				uarts_ble_send_data(SL_CODE_RUN_OUT);
-				return;
+				goto out;
+			}
+
+			if (smart_lock_compare_dev_id(buf) != 0)
+			{
+				NRF_LOG_INFO("Dev ID not match");
+				uarts_ble_send_data(SL_DEV_ID_FAIL);
+				goto out;
+			}
+
+      if (smart_lock_compare_date(buf) != 0)
+			{
+				NRF_LOG_INFO("Code is outdated");
+				uarts_ble_send_data(SL_CODE_OUT_OF_DATE);
+				goto out;
 			}
 
 			for (i = 0; i < SL_CODE_NUM; i++)
@@ -183,59 +234,103 @@ void smart_lock_parse_data(uint8_t *buf, int len)
 				{
 					sl_info.code_valid--;
 					sl_info.access_code[i] = 0xFF;
+					sl_info.dev_lock = true;
 					smart_lock_unlocked();
 					smart_lock_active_beep(true);
 					nrf_delay_ms(200);
 					smart_lock_active_beep(false);
 					uarts_ble_send_data(SL_UNLOCK_SUCCESS);
-					return;
+					goto out;
 				}
 			}
 
-			NRF_LOG_INFO("Failed to unlock bike");
+			NRF_LOG_INFO("Access code is not matched");
 			uarts_ble_send_data(SL_UNLOCK_FAIL);
-			return;
+			break;
 		case SL_UPDATE_CODE_CMD:
 			smart_lock_clear_code();
 			smart_lock_add_info(buf, len, sl_len);
 			NRF_LOG_INFO("Update access codes successfully!");
 		  uarts_ble_send_data(SL_UPDATE_SUCCESS);
-		  return ;
+		  break;
 		case SL_LOCK_CMD:
 			smart_lock_locked();
-		  start_loop_locker = true;
-			return;
+
+		  if (smart_lock_read_locker() == LOCKER_CONNECT)
+			{
+				NRF_LOG_INFO("Lock successful");
+				smart_lock_active_beep(false);
+				nrf_delay_ms(100);
+				smart_lock_active_beep(true);
+				nrf_delay_ms(200);
+				smart_lock_active_beep(false);
+				sl_info.lock_status = SL_LOCK;
+				uarts_ble_send_data(SL_LOCK_SUCCESS);
+			}
+			else
+			{
+				sl_info.lock_status = SL_UNUSABLE;
+			}
+		  break;
+		case SL_APP_READY_CMD:
+			break;
+		case SL_RESET_CMD:
+			smart_lock_init();
+		  uarts_ble_send_data(SL_RESET_SUCCESS);
+			break;
 		default:
       NRF_LOG_INFO("Unknown CMD !");
-		  return;
+		  break;
 	}
+
+out:
+	ble_lock_handle = false;
 }
 
 void smart_lock_detect(void)
 {
-	if (start_loop_locker)
-	{
-		NRF_LOG_INFO("start loop locker ...");
-		if (sl_info.lock_status == SL_LOCK && smart_lock_read_locker() != LOCKER_CONNECT)
-		{
-			NRF_LOG_INFO("Lock failed");
-			uarts_ble_send_data(SL_LOCK_FAIL);
+	int actual_lock;
 
-			if (sl_info.alarm_cnt > 20)
+	if (ble_lock_handle)
+		return;
+
+	nrf_delay_ms(100);
+
+	actual_lock = smart_lock_read_locker();
+
+	switch (sl_info.lock_status)
+	{
+		case SL_UNLOCK:
+			break;
+		case SL_LOCK:
+			break;
+		case SL_UNUSABLE:
+			if (actual_lock == LOCKER_CONNECT)
 			{
+				NRF_LOG_INFO("Lock successful");
+				sl_info.alarm_cnt = 0;
+				smart_lock_active_beep(false);
+				nrf_delay_ms(100);
 				smart_lock_active_beep(true);
-				return;
+				nrf_delay_ms(200);
+				smart_lock_active_beep(false);
+				sl_info.lock_status = SL_LOCK;
+				uarts_ble_send_data(SL_LOCK_SUCCESS);
 			}
-			sl_info.alarm_cnt += 1;
-		}
-		else
-		{
-			NRF_LOG_INFO("Lock successful");
-			uarts_ble_send_data(SL_LOCK_SUCCESS);
-			start_loop_locker = false;
-			sl_info.alarm_cnt = 0;
-			smart_lock_active_beep(false);
-		}
+			else
+			{
+				NRF_LOG_INFO("Lock failed");
+				sl_info.lock_status = SL_UNUSABLE;
+				uarts_ble_send_data(SL_LOCK_FAIL);
+
+				if (sl_info.alarm_cnt > 20)
+				{
+					smart_lock_active_beep(true);
+					return;
+				}
+				sl_info.alarm_cnt += 1;
+			}
+			break;
 	}
 }
 
@@ -250,15 +345,15 @@ void smart_lock_init(void)
 	sl_info.alarm_cnt = 0;
 	sl_info.update = false;
 	sl_info.beep = false;
-	start_loop_locker = false;
+	sl_info.dev_lock = false;
 
 	for (int i = 0; i <= SL_CODE_NUM; i++)
 	{
 		sl_info.access_code[i] = 0xFF;
 	}
 
-	nrf_gpio_cfg_output(LED_4);
-	nrf_gpio_pin_set(LED_4);
+	//nrf_gpio_cfg_output(LED_PIN);
+	//nrf_gpio_pin_set(LED_PIN);
 
 	nrf_gpio_cfg_output(BEEP_PIN);
 	nrf_gpio_pin_clear(BEEP_PIN);
@@ -267,4 +362,11 @@ void smart_lock_init(void)
 	nrf_gpio_pin_clear(RELAY_PIN);
 
 	nrf_gpio_cfg_input(LOCKER_PIN, NRF_GPIO_PIN_PULLUP);
+
+	if (smart_lock_read_locker() == LOCKER_CONNECT)
+		sl_info.lock_status = SL_LOCK;
+	else
+		sl_info.lock_status = SL_UNLOCK;
+
+	NRF_LOG_INFO("Init Lock Status = %x", sl_info.lock_status);
 }

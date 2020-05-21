@@ -216,7 +216,7 @@ uint32_t ble_uarts_init(ble_uarts_t * p_uarts, ble_uarts_init_t const * p_uarts_
     add_char_params.uuid                     = BLE_UUID_UARTS_RX_CHARACTERISTIC;
     add_char_params.uuid_type                = p_uarts->uuid_type;
     add_char_params.max_len                  = BLE_UARTS_MAX_RX_CHAR_LEN;
-    add_char_params.init_len                 = sizeof(uint8_t);
+    add_char_params.init_len                 = sizeof(uint16_t);
     add_char_params.is_var_len               = true;
     add_char_params.char_props.write         = 1;
     add_char_params.char_props.write_wo_resp = 1;
@@ -235,7 +235,7 @@ uint32_t ble_uarts_init(ble_uarts_t * p_uarts, ble_uarts_init_t const * p_uarts_
     add_char_params.uuid              = BLE_UUID_UARTS_TX_CHARACTERISTIC;
     add_char_params.uuid_type         = p_uarts->uuid_type;
     add_char_params.max_len           = BLE_UARTS_MAX_TX_CHAR_LEN;
-    add_char_params.init_len          = sizeof(uint8_t);
+    add_char_params.init_len          = sizeof(uint16_t);
     add_char_params.is_var_len        = true;
     add_char_params.char_props.notify = 1;
 
