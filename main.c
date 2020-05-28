@@ -138,7 +138,6 @@ int main(void)
     bool erase_bonds = buttons_init();
     power_management_init();
     ble_stack_init();
-    smart_lock_init();
 
     // Set BLE device name.
     ble_set_device_name(DEVICE_NAME);
@@ -156,6 +155,7 @@ int main(void)
     }
     nfc_pairing_init();
     pm_peers_delete();
+    smart_lock_init();
 
     // Start execution.
     NRF_LOG_INFO("NFC Connection Handover BLE peripheral device example started.");

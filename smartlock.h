@@ -6,7 +6,7 @@
 #define SMARTLOCK_H__
 
 #define BEEP_PIN    NRF_GPIO_PIN_MAP(1, 7)
-#define RELAY_PIN   NRF_GPIO_PIN_MAP(1, 10)
+#define RELAY_PIN   NRF_GPIO_PIN_MAP(1, 11)
 #define LOCKER_PIN  NRF_GPIO_PIN_MAP(1, 13)
 #define LED_PIN     LED_1
 
