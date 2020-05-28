@@ -250,11 +250,23 @@ public class DeviceScanActivity extends ListActivity {
             }
 
             BluetoothDevice device = mLeDevices.get(i);
+            final String mac1 = "C5:0B:E4:BB:56:4E";//red
+            final String mac2 = "F8:0B:2A:01:5C:AD";//yellow
             final String deviceName = device.getName();
-            if (deviceName != null && deviceName.length() > 0)
+            final String deviceMac = device.getAddress();
+            Log.w(TAG, "MAC : " + deviceMac);
+            if (deviceName != null && deviceName.length() > 0) {
                 viewHolder.deviceName.setText(deviceName);
-            else
-                viewHolder.deviceName.setText(R.string.unknown_device);
+
+            } else {
+                if (deviceMac.equals(mac1))
+                    viewHolder.deviceName.setText("SMARTLOCK");
+                else if (deviceMac.equals(mac2))
+                    viewHolder.deviceName.setText("SMARTLOCK");
+                else
+                    viewHolder.deviceName.setText(R.string.unknown_device);
+            }
+
             viewHolder.deviceAddress.setText(device.getAddress());
 
             return view;
